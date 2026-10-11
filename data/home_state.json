@@ -1,10 +1,10 @@
 {
   "bedroom": {
     "target_temperature": 21,
-    "light": false
+    "light": true
   },
   "living_room": {
-    "target_temperature": 19,
+    "target_temperature": 20.0,
     "light": true
   },
   "front_door": {
