@@ -2,7 +2,7 @@
 
 **Recorded:** 11 October 2026  
 **Reference implementation:** [`da16b878`](https://github.com/engrhamzaaliimran/HomeMind/commit/da16b878370caee1831f933622baf16831bdcced)  
-**Status:** Tool-enabled prototype working in manual tests; conversation persistence and systematic evaluation pending.
+**Status:** Tool-enabled prototype working in manual tests; **conversation memory/context management** and systematic evaluation pending.
 
 ## Implementation
 
@@ -10,7 +10,7 @@
 - **Agent:** `src/02_tool_agent_qwen.py` using LangChain `create_agent()`, `StructuredTool.from_function()`, structured tool calls and result messages.
 - **Tools:** `get_home_state`, `set_temperature`, `set_light`, `set_door_lock` in `src/home_tools.py`.
 - **State:** persistent `data/home_state.json`, containing bedroom/living-room thermostat **setpoints**, lights and front-door lock.
-- **Conversation:** recent five complete user turns held **in memory only**; not yet persisted across restarts.
+- **Conversation:** recent five complete user turns held **in memory only**; not yet persisted across restarts. Context-window selection, safe turn retention and follow-up recall need additional testing.
 - **Prompt:** carries Stage 01 intent → capability → verification → response logic, distinguishes general questions from device tasks, and adds a **one-shot JSON illustration** of structured tool selection.
 
 ## Manual observations
@@ -30,7 +30,7 @@
 
 ## Next steps before Stage 03
 
-1. Add persistent conversation memory, preserving `AIMessage.tool_calls` and matching `ToolMessage` IDs without replaying past actions.
+1. Add and validate persistent conversation memory **and context management**: preserve `AIMessage.tool_calls` and matching `ToolMessage` IDs without replaying past actions; select recent relevant context and test follow-up recall across restarts.
 2. Build **100 isolated test scenarios** with initial state, expected tool calls, expected final state and captured responses.
 3. Save run evidence to JSONL. Use deterministic checks for tools/state, plus **GPT-6 review** for response quality and unsupported claims. Produce a small Stage 02 evaluation report.
 
