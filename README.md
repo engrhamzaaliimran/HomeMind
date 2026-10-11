@@ -1,26 +1,31 @@
 # HomeMind
 
-HomeMind is an experimental **agentic smart-home assistant** built around a small, locally hosted language model.
-
-## Planned capabilities
-
-- Understand natural-language home automation requests and simulated device states.
-- Select and execute smart-home tools through a stateful agentic workflow.
-- Handle multi-step requests, clarification, and tool failures.
-- Evaluate a pretrained model against a fine-tuned version using LoRA.
+HomeMind is a work-in-progress **agentic smart-home assistant** built around a compact, locally hosted language model. The goal is to translate everyday language into **verifiable simulated device actions** while tracking progress through documented experiments.
 
 ## Technology
 
-- **LLM:** Qwen3-1.7B
-- **Inference:** Ollama
-- **Orchestration:** LangChain and LangGraph
-- **Fine-tuning:** Keras / LoRA (planned)
-- **Environment:** Python and simulated smart-home devices
+- **Baseline LLM:** Qwen3-1.7B with Ollama and LangChain
+- **Stateful orchestration (planned):** LangGraph
+- **Tool execution (planned):** Python functions controlling simulated lights, heating and locks
+- **Model adaptation (planned):** LoRA; evaluate against the untuned baseline
 
-## Status
+## Progress
 
-Early development. Initial local baseline experiments have been completed; the experiment log is recorded below. The tested Python script is still local and has not yet been pushed to `src/`.
+| Stage | Scope | Status |
+| --- | --- | --- |
+| **01** | Baseline inference, conversational history and prompt engineering | **Exploratory experiments recorded** |
+| **02** | Structured tool calling, simulated device state, execution verification | Planned |
+| **03** | LangGraph agentic workflows, confirmations and failure recovery | Planned |
+| **04** | Evaluation dataset, LoRA and comparative model evaluation | Planned |
 
-## Experimental log
+### Stage 01 — Key result
 
-- [Stage 01 — Prompt engineering and conversation context](experiments/stage_01_prompt_engineering.md): manually observed results, failures, limitations, and next test protocol.
+Initial prompting correctly interpreted thermostat requests and recalled temperature corrections, but sometimes **falsely reported that device actions were completed**, despite having no tools. General behavioral rules and an explicit empty capability list did not reliably prevent this. A mandatory **intent → capability check → execution evidence → response** procedure produced **3 correct capability/action responses out of 3 observed** in one exploratory session.
+
+This is not a reliability benchmark. A future tool-enabled implementation must enforce availability and execution status in Python rather than relying on generated text.
+
+- [Full Stage 01 experimental log](experiments/stage_01_prompt_engineering.md)
+- [Project progress webpage](https://engrhamzaaliimran.github.io/homemind.html)
+- [Current baseline source](src/01_baseline_qwen.py)
+
+**Current limitations:** No implemented smart-home execution tools, no LangGraph orchestration, and no LoRA training results yet.
