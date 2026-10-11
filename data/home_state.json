@@ -1,0 +1,13 @@
+{
+  "bedroom": {
+    "target_temperature": 21,
+    "light": false
+  },
+  "living_room": {
+    "target_temperature": 19,
+    "light": true
+  },
+  "front_door": {
+    "locked": true
+  }
+}
