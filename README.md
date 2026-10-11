@@ -27,6 +27,14 @@ HomeMind is an experimental, locally hosted **agentic smart-home assistant** tha
 
 **Stage 02:** Python tools now execute through LangChain and update `home_state.json`. Manual runs confirmed a bedroom light action and invalid-device failure; with the current one-shot prompt, `get_home_state` and `set_temperature` generated real tool calls, including a successful living-room change to **20°C**. General questions and a contextual follow-up also worked in that run. Earlier prompt configurations sometimes refused legitimate queries or printed tool names instead of calling them; a broad benchmark is still required.
 
+### Why we introduced one-shot tool prompting
+
+The first Stage 02 prompts produced **inconsistent tool calling**: Qwen sometimes invoked tools correctly, but in other runs rejected supported home-state queries and ordinary general-knowledge questions. It also sometimes returned just `get_home_state` or printed a `set_temperature` JSON object **as answer text**, with no actual LangChain tool execution. The earlier response-format placeholder was occasionally copied verbatim.
+
+**Hypothesis:** a concrete one-shot example mapping “Turn on the bedroom light” to `set_light(room="bedroom", on=True)`, together with an instruction to use the **structured tool-call interface rather than print JSON**, could improve tool selection and execution on the small Qwen3-1.7B model.
+
+**Observed after the change:** one manual session showed actual `get_home_state` and `set_temperature` calls with tool results, a normal general-knowledge answer, correct follow-up recall, and an unsupported-action refusal. This is **suggestive, not proof**: the sessions were not paired or repeated enough to attribute the improvement to one-shot prompting or estimate reliability. [Detailed experimental rationale and observations](experiments/stage_02_tool_calling.md).
+
 **Not yet complete:** persistent dialogue across restarts **and** reliable context management/recall, systematic 100-case evaluation, and advanced custom workflows. Stage 02 uses `create_agent()` (which is already LangGraph-backed); Stage 03 will focus on explicit orchestration beyond this basic tool loop.
 
 ## Files and reports
