@@ -19,4 +19,8 @@ HomeMind is an experimental **agentic smart-home assistant** built around a smal
 
 ## Status
 
-Early development. The first step is baseline inference with Qwen3-1.7B through Ollama and LangChain. Source code will be added incrementally under `src/`.
+Early development. Initial local baseline experiments have been completed; the experiment log is recorded below. The tested Python script is still local and has not yet been pushed to `src/`.
+
+## Experimental log
+
+- [Stage 01 — Prompt engineering and conversation context](experiments/stage_01_prompt_engineering.md): manually observed results, failures, limitations, and next test protocol.
