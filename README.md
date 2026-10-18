@@ -1,6 +1,6 @@
 # HomeMind
 
-HomeMind is an experimental, locally hosted **agentic smart-home assistant** that uses Qwen3-1.7B to interpret natural-language requests, select tools, and control **simulated** devices. Development is documented through manual experiments and a reproducible 100-scenario Stage 02 baseline evaluation.
+HomeMind is an experimental, locally hosted **agentic smart-home assistant** that uses Qwen3-1.7B to interpret natural-language requests, select tools, and control **simulated** devices. Development is documented through manual experiments, a reproducible 100-scenario Stage 02 baseline, and a Stage 02.1 Python normalization experiment.
 
 ## Technology and architecture
 
@@ -16,7 +16,8 @@ HomeMind is an experimental, locally hosted **agentic smart-home assistant** tha
 | --- | --- |
 | **01 · Prompt engineering and context** | Exploratory experiments complete |
 | **02 · Tool schemas, actual execution, persistent house state** | Implemented; baseline evaluation identifies reliability limitations |
-| **02 · Reliability fixes from baseline** | **Next priority:** resolve identified failures and re-evaluate before adding memory features |
+| **02.1 · Python device-ID normalization and serialized JSON access** | **Implemented and benchmarked:** 100/100 scenarios ran; 33/35 expected action sequences verified after normalization (vs. 14/35 baseline) |
+| **02 · Remaining reliability fixes** | **Next priority:** capability validation, clarification, execution honesty and multi-action handling before memory features |
 | **02 · Conversation memory and context management** | **Deferred until reliability fixes are evaluated:** persistence across restarts, safe context selection and follow-up validation |
 | **02 · 100-scenario benchmark and GPT-6 judging** | **Completed baseline (18 Oct 2026); 52 full pass / 12 partial / 36 fail** |
 | **03 · Advanced LangGraph workflows, approvals and retries** | Planned |
@@ -36,7 +37,7 @@ The first Stage 02 prompts produced **inconsistent tool calling**: Qwen sometime
 
 **Observed after the change:** one manual session showed actual `get_home_state` and `set_temperature` calls with tool results, a normal general-knowledge answer, correct follow-up recall, and an unsupported-action refusal. This is **suggestive, not proof**: the sessions were not paired or repeated enough to attribute the improvement to one-shot prompting or estimate reliability. [Detailed experimental rationale and observations](experiments/stage_02_tool_calling.md).
 
-**Next priority:** systematically address the limitations identified in the 100-scenario baseline and re-run the benchmark before implementing storage or long-term conversational memory. **Not yet complete:** persistent dialogue across restarts, context management/recall, and advanced custom workflows. Stage 02 uses `create_agent()` (which is already LangGraph-backed); Stage 03 will focus on explicit orchestration beyond this basic tool loop.
+**Next priority:** systematically address the remaining limitations identified in Stage 02 and 02.1 evaluations, and re-run the benchmark before implementing storage or long-term conversational memory. **Not yet complete:** persistent dialogue across restarts, context management/recall, and advanced custom workflows. Stage 02 uses `create_agent()` (which is already LangGraph-backed); Stage 03 will focus on explicit orchestration beyond this basic tool loop.
 
 ## Stage 02 baseline evaluation — 18 October 2026
 
@@ -46,11 +47,46 @@ The **100-scenario benchmark** exercised the current **one-shot Stage 02 system 
 
 Most prominent problems: noncanonical device IDs (e.g. `living room` instead of `living_room`); incorrect tool actions for unsupported requests; unsupported completion claims; missed clarifications; and treating target thermostat setpoints as measured temperatures. Some conversation-context scenarios had earlier setup actions fail; these should not be counted as isolated memory failures.
 
+## Stage 02.1 — Python argument normalization (18 October 2026)
+
+**Goal:** reduce single-device failures where the LLM chooses the correct tool but generates a noncanonical device identifier such as `living room` instead of `living_room`. This is an application-layer reliability patch, not an LLM fine-tune or prompt change.
+
+**Implementation:** [`src/02_tool_agent_qwen_with_normalization_check.py`](src/02_tool_agent_qwen_with_normalization_check.py) preserves the original Stage 02 agent (`src/02_tool_agent_qwen.py`) as a baseline. It registers three checked wrappers with the **same public tool names, argument signatures and system prompt**. Python normalizes only deterministic separator/case variants and explicitly reviewed aliases, verifies that the resolved device supports the requested property, and then calls the existing write function. Unknown/fuzzy matches are rejected rather than guessed. Tool results include `device_id_normalization: {from, to}` when a correction occurs. An in-process `threading.RLock` serializes state reads and complete read–modify–write operations to prevent JSON corruption when LangChain runs multiple tools concurrently. This lock does **not** coordinate independent Python processes.
+
+**What did not change:** Qwen3-1.7B, model settings, one-shot Stage 02 prompt (same SHA-256 fingerprint), four exposed tool names, five-turn RAM conversation history, and `src/home_tools.py`. The original agent script remains available for replication.
+
+### Before/after benchmark
+
+Both local runs used the same 100 scenarios (120 user requests including setup turns), with fresh state per scenario. Stage 02.1 completed **100/100** cases without runtime errors, including multi-device cases that had triggered overlapping JSON writes in an earlier aborted attempt.
+
+| Deterministic measure | Stage 02 baseline | Stage 02.1 |
+| --- | ---: | ---: |
+| Expected write/action sequences with verified tool results | 14/35 (40.0%) | **33/35 (94.3%)** |
+| Single-device target action sequences | 9/20 | **20/20** |
+| Multi-device target action sequences | 2/10 | **9/10** |
+| Context-dependent target action sequences | 3/5 | **4/5** |
+| Expected final-state fields check | 84/100 | **98/100** |
+| No unrequested device-state changes | 96/100 | **96/100** |
+
+**Metric distinction:** the evaluation runner's original `required_calls_pass` and `expected_write_results_pass` check **raw LLM arguments** against exact canonical IDs. They therefore do not fully credit normalization. The 33/35 measure was independently computed from the logged tool-call IDs, original arguments, `device_id_normalization.to` where present, actual `success: true` results, and expected arguments. Across the run, **28 tool results contained normalization records, 27 of which succeeded**; the remaining one was correctly rejected by temperature-range validation (5°C). Final-state-field checks can be vacuously true in cases with no expected fields; they are **not** an overall accuracy measure.
+
+**Remaining failures and risks:** HM042 generated `room="all"` instead of enumerating lights, so only the door-lock action succeeded; HM090 failed to execute the requested follow-up temperature increase. Four cases still changed device state without adequate authorization (HM059, HM060, HM063, HM069). Python ID normalization cannot fix unsupported-capability claims, ambiguity, incorrect intent, or unsupported execution claims. **No new GPT-6 qualitative pass/partial/fail review has yet been performed for Stage 02.1.** The baseline's 52/12/36 judged split must not be reused as Stage 02.1's score.
+
+**Run Stage 02.1 interactively:**
+
+```bash
+python src/02_tool_agent_qwen_with_normalization_check.py
+```
+
+**Reproduce the same benchmark:** in `src/03_run_evaluation.py`, set `AGENT_FILE = ROOT / "src" / "02_tool_agent_qwen_with_normalization_check.py"` (instead of the baseline filename); then run `python src/03_run_evaluation.py` from the repository root. The benchmark uses a temporary simulated state and records results in `experiments/results/`. Keep the original benchmark fixtures unchanged.
+
+**Evidence:** [Stage 02.1 raw 100-scenario trace](experiments/results/stage_02_01_eval_20261018_181720.jsonl) · [Stage 02 baseline trace](experiments/results/stage_02_eval_20261018_152127.jsonl) · [Benchmark scenarios](experiments/stage_02_benchmark_100.jsonl).
+
 ## Immediate development priority — reliability before memory
 
 **The first target is to fix each limitation identified in the Stage 02 evaluation before moving to persistent storage or conversation-context/memory features.** The present five-turn RAM context remains unchanged while these fixes are tested. We will use the frozen 100-scenario benchmark to compare improvements against the baseline, recording any remaining failures rather than assuming they are resolved.
 
-1. **Tool arguments and device IDs:** normalize or validate room and door identifiers; reject invalid targets clearly.
+1. **Tool arguments and device IDs:** **Stage 02.1 implemented and verified** deterministic normalization. Continue monitoring rejected/ambiguous identifiers and unexpected side effects.
 2. **Capability boundaries:** prevent unsupported operations from triggering a superficially related but unauthorized tool action.
 3. **Ambiguity handling:** request clarification when a room, device, target value or intended action is unspecified.
 4. **Execution honesty:** verify actual tool results before claiming completion; report partial success and failures accurately.
@@ -75,7 +111,8 @@ The runner writes timestamped JSONL to `experiments/results/`. Check the raw and
 ## Files and reports
 
 - [`src/01_baseline_qwen.py`](src/01_baseline_qwen.py) — Stage 01 baseline
-- [`src/02_tool_agent_qwen.py`](src/02_tool_agent_qwen.py) — current Stage 02 agent
+- [`src/02_tool_agent_qwen.py`](src/02_tool_agent_qwen.py) — frozen Stage 02 baseline agent
+- [`src/02_tool_agent_qwen_with_normalization_check.py`](src/02_tool_agent_qwen_with_normalization_check.py) — Stage 02.1 normalization and safe in-process state access
 - [`src/home_tools.py`](src/home_tools.py) — simulated device tools
 - [`src/03_run_evaluation.py`](src/03_run_evaluation.py) — Stage 02 reproducible evaluation runner
 - [Stage 01 experiments](experiments/stage_01_prompt_engineering.md)
