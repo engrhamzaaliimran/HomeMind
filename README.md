@@ -1,6 +1,6 @@
 # HomeMind
 
-HomeMind is an experimental, locally hosted **agentic smart-home assistant** that uses Qwen3-1.7B to interpret natural-language requests, select tools, and control **simulated** devices. Development is documented through manual experiments, a reproducible 100-scenario Stage 02 baseline, and a Stage 02.1 Python normalization experiment.
+HomeMind is an experimental, locally hosted **agentic smart-home assistant** that uses Qwen3-1.7B to interpret natural-language requests, select tools, and control **simulated** devices. Development is documented through manual experiments, a reproducible 100-scenario Stage 02 baseline, and a Stage 02.1 Python normalization experiment with updated evaluation and a visual execution pipeline.
 
 ## Technology and architecture
 
@@ -16,10 +16,10 @@ HomeMind is an experimental, locally hosted **agentic smart-home assistant** tha
 | --- | --- |
 | **01 · Prompt engineering and context** | Exploratory experiments complete |
 | **02 · Tool schemas, actual execution, persistent house state** | Implemented; baseline evaluation identifies reliability limitations |
-| **02.1 · Python device-ID normalization and serialized JSON access** | **Implemented and benchmarked:** 100/100 scenarios ran; 33/35 expected action sequences verified after normalization (vs. 14/35 baseline) |
+| **02.1 · Python device-ID normalization and serialized JSON access** | **Implemented and evaluated:** 100/100 scenarios completed; **33/35** verified actions; **73 pass / 7 partial / 20 fail** qualitative judgments |
 | **02 · Remaining reliability fixes** | **Next priority:** capability validation, clarification, execution honesty and multi-action handling before memory features |
 | **02 · Conversation memory and context management** | **Deferred until reliability fixes are evaluated:** persistence across restarts, safe context selection and follow-up validation |
-| **02 · 100-scenario benchmark and GPT-6 judging** | **Completed baseline (18 Oct 2026); 52 full pass / 12 partial / 36 fail** |
+| **02 · 100-scenario baseline and evaluation** | Completed: **52 pass / 12 partial / 36 fail**; retained unchanged for comparison |
 | **03 · Advanced LangGraph workflows, approvals and retries** | Planned |
 | **04 · Fine-tuning and controlled baseline comparison** | Planned |
 
@@ -70,7 +70,96 @@ Both local runs used the same 100 scenarios (120 user requests including setup t
 
 **Metric distinction:** the evaluation runner's original `required_calls_pass` and `expected_write_results_pass` check **raw LLM arguments** against exact canonical IDs. They therefore do not fully credit normalization. The 33/35 measure was independently computed from the logged tool-call IDs, original arguments, `device_id_normalization.to` where present, actual `success: true` results, and expected arguments. Across the run, **28 tool results contained normalization records, 27 of which succeeded**; the remaining one was correctly rejected by temperature-range validation (5°C). Final-state-field checks can be vacuously true in cases with no expected fields; they are **not** an overall accuracy measure.
 
-**Remaining failures and risks:** HM042 generated `room="all"` instead of enumerating lights, so only the door-lock action succeeded; HM090 failed to execute the requested follow-up temperature increase. Four cases still changed device state without adequate authorization (HM059, HM060, HM063, HM069). Python ID normalization cannot fix unsupported-capability claims, ambiguity, incorrect intent, or unsupported execution claims. **No new GPT-6 qualitative pass/partial/fail review has yet been performed for Stage 02.1.** The baseline's 52/12/36 judged split must not be reused as Stage 02.1's score.
+**Remaining failures and risks:** HM042 generated `room="all"` instead of enumerating lights, so only the door-lock action succeeded; HM090 failed to execute the requested follow-up temperature increase. Four cases still changed device state without adequate authorization (HM059, HM060, HM063, HM069). Python ID normalization cannot fix unsupported-capability claims, ambiguity, incorrect intent, or unsupported execution claims. **Stage 02.1 response-level qualitative review:** 73 pass / 7 partial / 20 fail, compared with the Stage 02 baseline's 52 / 12 / 36. The reviewer examined the newer tool results, device-state changes, and final answers (including normalization evidence). These are qualitative judgments from one run of a challenge set, **not** an independent production reliability estimate. [Browse all 100 updated Stage 02.1 questions, responses and verdicts on the project website](https://engrhamzaaliimran.github.io/homemind.html#question-browser). The repository retains the raw Stage 02.1 trace; an independently exported, separate Stage 02.1 judged JSONL has not been committed.
+
+### Updated qualitative results (100 scenarios)
+
+| Outcome | Stage 02 baseline | Stage 02.1 |
+| --- | ---: | ---: |
+| Full pass | 52 | **73** |
+| Partial pass | 12 | **7** |
+| Fail | 36 | **20** |
+
+| Category | Stage 02 full passes | Stage 02.1 full passes |
+| --- | ---: | ---: |
+| Single-device control | 9/20 | **20/20** |
+| Home-state questions | 11/15 | **11/15** |
+| Multi-device commands | 2/10 | **9/10** |
+| Unsupported / invalid requests | 11/15 | **13/15** |
+| Ambiguity / clarification | 1/10 | **1/10** |
+| General knowledge | 9/10 | **9/10** |
+| Conversation context | 6/10 | **7/10** |
+| Execution honesty | 3/10 | **3/10** |
+
+**What improved:** deterministic device-ID normalization repaired common mismatches such as `living room` → `living_room`. A process-local lock prevented concurrent accesses from corrupting simulated state JSON. Verified action sequences improved **14/35 → 33/35** on the same benchmark, without changing the Stage 02 system prompt or Qwen settings. **What remains:** capability enforcement, ambiguous instructions, unsupported success claims and some multi-action/context handling.
+
+### Stage 02.1 agent execution pipeline
+
+This is the **same Mermaid flowchart displayed on the [HomeMind project page](https://engrhamzaaliimran.github.io/homemind.html#execution-pipeline)**. Click to expand.
+
+<details>
+<summary>View execution pipeline flowchart</summary>
+
+```mermaid
+flowchart TD
+    A([START]) --> B[/User enters a command/]
+    B --> C["Load recent conversation context<br/>Last 5 turns in RAM"]
+    C --> D["Qwen3-1.7B<br/>Intent understanding + tool selection"]
+
+    D --> E{"What type of request?"}
+
+    E -->|General knowledge| F[/Generate normal answer/]
+    E -->|Home-state query| G["get_home_state()"]
+    E -->|Device action| H{"Did Qwen generate<br/>a structured tool call?"}
+    E -->|Unsupported or unclear| I[/Qwen should refuse or clarify/]
+
+    H -->|No| J[/Generate response without execution/]
+    H -->|Yes| K["Python argument validation"]
+
+    K --> L{"Valid device ID?"}
+    L -->|Yes| P["Execute original Python tool"]
+    L -->|No| M{"Known alias or<br/>deterministic normalization?"}
+
+    M -->|Yes| N["Convert to canonical ID<br/>e.g. living room → living_room"]
+    N --> P
+    M -->|No| O["Return INVALID_DEVICE_ID<br/>No action executed"]
+
+    P --> Q["Protected JSON access<br/>threading.RLock"]
+    Q --> R[("home_state.json<br/>Simulated device state")]
+    R --> S{"Tool returned<br/>success = true?"}
+
+    S -->|Yes| T["Return successful tool result"]
+    S -->|No| U["Return failure and error"]
+
+    G --> R
+    O --> V["Qwen receives tool result"]
+    T --> V
+    U --> V
+
+    V --> W[/Qwen generates final response/]
+    F --> X["Update recent conversation<br/>history in RAM"]
+    I --> X
+    J --> X
+    W --> X
+
+    X --> Y([END])
+
+    classDef start fill:#def3e9,stroke:#26846a,color:#155443
+    classDef process fill:#e6eeff,stroke:#4d78c0,color:#193d79
+    classDef decision fill:#fff0ce,stroke:#c28c2b,color:#674514
+    classDef datastore fill:#eee6fc,stroke:#9165c0,color:#4f3178
+    classDef output fill:#e8f5f4,stroke:#339b8e,color:#19554f
+
+    class A,Y start
+    class C,D,G,K,N,P,Q,T,U,V,X process
+    class E,H,L,M,S decision
+    class R datastore
+    class B,F,I,J,O,W output
+```
+
+</details>
+
+**Symbols:** oval = start/end; parallelogram = input/output; rectangle = operation; diamond = decision; cylinder = simulated device-state JSON. **Current limitation:** the capability and ambiguity decision is still instructed by the model prompt, not enforced by an independent Python policy. JSON locking is in-process only. The flowchart illustrates intended high-level paths; unsupported claims remain an observed failure mode.
 
 **Run Stage 02.1 interactively:**
 
@@ -95,7 +184,7 @@ python src/02_tool_agent_qwen_with_normalization_check.py
 
 **Exit criterion:** re-run all 100 scenarios with the same evaluation criteria; inspect previously failing cases and regressions, and document unresolved limitations. Only **after this reliability phase** should HomeMind proceed to persistent conversation storage, retrieval, summarization, and broader context/memory experiments. Existing device-state JSON persistence is separate from (and does not implement) conversational memory.
 
-**Methodological constraints:** one non-random challenge set, one local run, simulated devices; actual Ollama context allocation not recorded. The GPT-6 judgments are qualitative and should not be treated as an independent model-based scoring script or an unbiased reliability estimate. No changes to the Stage 02 agent/prompt were introduced for this baseline.
+**Methodological constraints:** one non-random challenge set and one completed local run per version, using simulated devices; actual Ollama context allocation was not recorded. GPT-6 verdicts are qualitative, not an independently validated reliability estimate. Python normalization improves execution but does not guarantee policy compliance. Original Stage 02 agent/prompt are frozen as a comparison baseline.
 
 **Reproduce (with Ollama and dependencies running locally):**
 
@@ -117,4 +206,5 @@ The runner writes timestamped JSONL to `experiments/results/`. Check the raw and
 - [`src/03_run_evaluation.py`](src/03_run_evaluation.py) — Stage 02 reproducible evaluation runner
 - [Stage 01 experiments](experiments/stage_01_prompt_engineering.md)
 - [Stage 02 implementation checkpoint](experiments/stage_02_tool_calling.md)
-- [Project progress webpage](https://engrhamzaaliimran.github.io/homemind.html)
+- [Project webpage and interactive Stage 02.1 evaluation](https://engrhamzaaliimran.github.io/homemind.html)
+- [Expandable execution flowchart on website](https://engrhamzaaliimran.github.io/homemind.html#execution-pipeline)
