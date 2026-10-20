@@ -1,6 +1,6 @@
 # HomeMind
 
-HomeMind is an experimental, locally hosted **agentic smart-home assistant** that uses Qwen3-1.7B to interpret natural-language requests, select tools, and control **simulated** devices. Development is documented through manual experiments, a reproducible 100-scenario Stage 02 baseline, a Stage 02.1 Python normalization experiment, and Stage 02.2 execution-honesty prompting and tool-description comparisons.
+HomeMind is an experimental, locally hosted **agentic smart-home assistant** that uses Qwen3-1.7B to interpret natural-language requests, select tools, and control **simulated** devices. Development is documented through manual experiments, a reproducible 100-scenario Stage 02 baseline, a Stage 02.1 Python normalization experiment, Stage 02.2 execution-honesty prompting, and Stage 02.3 independent Qwen3-0.6B claim verification.
 
 ## Technology and architecture
 
@@ -19,6 +19,7 @@ HomeMind is an experimental, locally hosted **agentic smart-home assistant** tha
 | **02.1 · Python device-ID normalization and serialized JSON access** | **Implemented and evaluated:** 100/100 scenarios completed; **33/35** verified actions; **73 pass / 7 partial / 20 fail** qualitative judgments |
 | **02.2 · Execution-honesty prompt safeguards** | **Implemented and evaluated:** 33/35 verified action sequences; 99/100 cases without unauthorized changes (vs 96/100 in Stage 02.1). Remaining fabricated success claims. |
 | **02.2 variant · Explicit tool descriptions** | **Evaluated separately:** 33/35 verified actions; 98/100 cases without unauthorized changes. No further overall improvement. |
+| **02.3 · Qwen3-0.6B structured claim verifier** | **Evaluated:** 100/100 scenarios; 75 pass / 15 partial / 10 fail in qualitative review; detects targeted fabricated success claims but still has false rejections. |
 | **02 · Remaining reliability fixes** | **Next priority:** capability validation, clarification, execution honesty and multi-action handling before memory features |
 | **02 · Conversation memory and context management** | **Deferred until reliability fixes are evaluated:** persistence across restarts, safe context selection and follow-up validation |
 | **02 · 100-scenario baseline and evaluation** | Completed: **52 pass / 12 partial / 36 fail**; retained unchanged for comparison |
@@ -40,6 +41,53 @@ The first Stage 02 prompts produced **inconsistent tool calling**: Qwen sometime
 **Observed after the change:** one manual session showed actual `get_home_state` and `set_temperature` calls with tool results, a normal general-knowledge answer, correct follow-up recall, and an unsupported-action refusal. This is **suggestive, not proof**: the sessions were not paired or repeated enough to attribute the improvement to one-shot prompting or estimate reliability. [Detailed experimental rationale and observations](experiments/stage_02_tool_calling.md).
 
 **Next priority:** systematically address the remaining limitations identified in Stage 02 and 02.1 evaluations, and re-run the benchmark before implementing storage or long-term conversational memory. **Not yet complete:** persistent dialogue across restarts, context management/recall, and advanced custom workflows. Stage 02 uses `create_agent()` (which is already LangGraph-backed); Stage 03 will focus on explicit orchestration beyond this basic tool loop.
+
+## Stage 02.3 — Qwen3-0.6B execution-claim verification (20 October 2026)
+
+**Status:** Experimental, evaluated; validator prompt refinement planned. Stage 02.2 remains the baseline. This experiment does **not** alter the Stage 02.2 prompt or device tools.
+
+**Objective:** Prevent the assistant from falsely asserting that smart-home operations succeeded while preserving natural-language replies.
+
+**Pipeline:**
+1. **Qwen3-1.7B main agent** interprets the request, invokes real LangChain tools, and drafts the answer.
+2. An independent **Qwen3-0.6B extractor** converts *asserted* action, past-action and device-state claims into structured JSON.
+3. **Python verification** compares the claims with genuine successful tool results and state reads (including bounded prior-turn evidence for past actions).
+4. An unsupported claim triggers **one tool-free Qwen3-1.7B revision**, followed by re-extraction and verification; a second failure results in a conservative fallback.
+
+**Files:**
+- [Claim-verifier agent](src/02_3_claim_verifier_agent.py)
+- [100-scenario evaluation runner](src/03_run_claim_evaluation.py) — wraps the existing `src/03_run_evaluation.py` protocol.
+- [Full JSONL results — 20 October 2026](experiments/results/stage_02_eval_20261020_225733.jsonl) — raw user turns, final outputs, tool traces, state changes, extracted claims, verdicts and correction decisions.
+
+**Reproduce** (from repository root; Ollama must be running with `qwen3:1.7b` and `qwen3:0.6b` pulled):
+
+```bash
+ollama pull qwen3:0.6b
+python src/03_run_claim_evaluation.py --ids HM092 HM093 HM094
+python src/03_run_claim_evaluation.py
+```
+
+The evaluation uses the **same 100 benchmark scenarios / 120 user turns**, isolated starting states, real tool executions and deterministic checks as earlier Stage 02 experiments. The new runner adds `claim_verification` diagnostics to each turn.
+
+| Measure | Stage 02.3 result |
+| --- | ---: |
+| Scenarios completed | 100 / 100 |
+| Expected write sequences verified after device-ID normalization | 33 / 35 (94.3%) |
+| Scenarios with no unauthorized state change | 98 / 100 |
+| Real tool calls | 81 |
+| Accepted responses without revision | 87 / 120 |
+| Responses skipped by keyword filter | 22 / 120 |
+| Responses flagged for revision | 11 / 120 |
+| Revisions accepted after second check | 5 |
+| Safe fallbacks after failed second check | 6 |
+
+**Qualitative review:** Stage 02.3 yielded **75 pass / 15 partial / 10 fail**, for **82.5/100** with partial counted as half credit. The earlier Stage 02.2 review yielded **73 pass / 16 partial / 11 fail** (81/100). These are human qualitative classifications, **not machine-generated labels stored in the raw JSONL**, and the small difference should not be treated as a statistically established improvement.
+
+**Key result:** The extractor/verifier identified and blocked or corrected fabricated execution assertions in **HM092, HM093 and HM094** (door locked, bedroom lamp turned on, and living-room setpoint changed despite no successful tool execution). It also incorrectly rejected valid results for **HM009, HM040 and HM084** because it confused *locked* with *unlocked*, and mishandled previous-turn evidence in **HM085**. **HM034** retained a false claim about a nonexistent kitchen thermostat. Two scenarios (**HM059 and HM060**) produced unauthorized tool effects; checking the wording of the final response cannot undo those effects. Some relevant answers escaped checking because the current system uses a keyword gate.
+
+**Next iteration:** Refine the extractor prompt for negation, temporal language and unknown devices; ensure complete verification coverage; benchmark unsupported claims caught *and* legitimate claims wrongly rejected using the same frozen scenarios before considering deployment.
+
+---
 
 ## Stage 02 baseline evaluation — 18 October 2026
 
