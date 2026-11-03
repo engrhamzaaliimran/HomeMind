@@ -91,7 +91,7 @@ python src/03_run_evidence_correction_evaluation.py
 python src/04_export_evidence_correction_csv.py experiments/results/stage_02_eval_20261103_163750.jsonl
 ```
 
-[Stage 02.4 agent](src/02_4_evidence_self_correction_agent.py) · [Evaluation runner](src/03_run_evidence_correction_evaluation.py) · [Raw 100-scenario JSONL trace](experiments/results/stage_02_eval_20261103_163750.jsonl)
+[Stage 02.4 agent](src/02_4_evidence_self_correction_agent.py) · [Evaluation runner](src/03_run_evidence_correction_evaluation.py) · [Raw 100-scenario JSONL trace](experiments/results/stage_02_eval_20261103_163750.jsonl) · [100-scenario qualitative review CSV](experiments/results/stage_02_4_qualitative_judgments_20261103.csv) · [Evaluation report](experiments/stage_02_4_evaluation_report.md)
 
 **Next experiment (not yet implemented):** a hybrid validator that uses 0.6B for first-pass extraction, Python for receipt matching, and selective 1.7B semantic adjudication of ambiguous or incompletely extracted claims.
 
