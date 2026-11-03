@@ -45,7 +45,8 @@ Python claim-to-evidence verification
 | **02** | Structured tool calling and persistent simulated device state | Baseline evaluated |
 | **02.1** | Python device-ID normalization and in-process JSON locking | Implemented and evaluated |
 | **02.2** | Execution-honesty prompt safeguards; tool-description variant also tested | Implemented and evaluated |
-| **02.3 · Current** | Independent Qwen3 0.6B claim extraction, Python verification, and one correction attempt | **Experimental; evaluated** |
+| **02.3** | Independent Qwen3 0.6B claim extraction, Python verification, and one correction attempt | Evaluated |
+| **02.4 · Current** | Structured execution-evidence feedback and one tool-free self-correction; 0.6B extractor + Python recheck | **Experimental; evaluated** |
 
 ## Benchmark results
 
@@ -56,11 +57,12 @@ The same **100 scenarios / 120 user turns** test device control, state queries, 
 | Stage 02 baseline | 52 | 12 | 36 | 14/35 | 96/100 |
 | Stage 02.1 normalization | 73 | 7 | 20 | 33/35 | 96/100 |
 | Stage 02.2 prompt safeguards | 73 | 16 | 11 | 33/35 | 99/100 |
-| **Stage 02.3 claim verification** | **75** | **15** | **10** | **33/35** | **98/100** |
+| Stage 02.3 claim verification | 75 | 15 | 10 | 33/35 | 98/100 |
+| **Stage 02.4 evidence-guided correction** | **76** | **17** | **7** | **33/35** | **98/100** |
 
 *Pass/partial/fail are qualitative reviews, not deterministic accuracy scores. Action-sequence counts after Stage 02.1 credit verified device-ID normalization. These are individual local runs on a fixed challenge set; small differences are not statistically established improvements.*
 
-### Stage 02.3: what changed?
+### Stage 02.3: previous baseline
 
 Across 120 responses, **87 were accepted unchanged**, **22 bypassed the keyword-based verifier**, and **11 triggered a correction attempt**. Of those 11, **5 revisions were accepted** and **6 ended in a conservative fallback**.
 
@@ -69,6 +71,29 @@ Across 120 responses, **87 were accepted unchanged**, **22 bypassed the keyword-
 **Still unresolved:** It sometimes confuses *locked* with *unlocked*, rejects valid confirmations, mishandles prior-turn evidence, and misses unsupported-device assertions. In **HM059/HM060**, the underlying agent performed unauthorized actions; post-response checking cannot undo them.
 
 [Full Stage 02.3 JSONL trace](experiments/results/stage_02_eval_20261020_225733.jsonl) · [Stage 02.2 trace](experiments/results/stage_02_eval_20261018_204026.jsonl) · [Stage 02 baseline report](experiments/stage_02_evaluation_report.md)
+
+### Stage 02.4: structured evidence-guided self-correction (3 November 2026)
+
+**Research question:** Can structured feedback about actual tool execution help a small agentic language model correct unsupported responses without making additional tool calls?
+
+The initial **Qwen3 1.7B** LangChain agent still executes the same four simulated home tools. **Qwen3 0.6B** extracts claims and deterministic **Python** compares them against tool receipts. If an answer is unsupported, the main **1.7B** model receives the original request/answer, current and prior execution receipts, and unsupported claims, then generates **one tool-free revision**. The extractor and Python check the revision against the *same* receipts; an unsupported second attempt produces a conservative fallback. The correction stage is never bound to tools.
+
+Across **100 scenarios / 120 user turns**, 88 original answers were accepted, 21 skipped the keyword filter, **11** triggered correction, **3** corrections were accepted and **8** ended with a fallback. The qualitative LLM-as-judge review assigned **76 pass / 17 partial / 7 fail**, compared with 75 / 15 / 10 for Stage 02.3. Expected write sequences remained **33/35**, and **98/100** scenarios had no unrequested state changes.
+
+**Interpretation:** The aggregate difference is small and based on separate local runs; it is **not** evidence of a causal improvement attributable solely to more structured feedback. HM038 demonstrated a helpful correction, while HM009/HM040/HM045/HM084 illustrated false rejections caused by extractor errors (negation or numeric types). HM099 showed that a second extraction returning an empty claim list can miss a fabricated 50°C completion claim. HM059/HM060 still demonstrate that post-execution honesty checks do not prevent unwanted initial actions.
+
+**Reproduce this version (default 0.6B extractor):**
+
+```bash
+python src/02_4_evidence_self_correction_agent.py
+python src/03_run_evidence_correction_evaluation.py --ids HM009 HM034 HM038 HM045 HM065 HM099
+python src/03_run_evidence_correction_evaluation.py
+python src/04_export_evidence_correction_csv.py experiments/results/stage_02_eval_20261103_163750.jsonl
+```
+
+[Stage 02.4 agent](src/02_4_evidence_self_correction_agent.py) · [Evaluation runner](src/03_run_evidence_correction_evaluation.py) · [Raw 100-scenario JSONL trace](experiments/results/stage_02_eval_20261103_163750.jsonl)
+
+**Next experiment (not yet implemented):** a hybrid validator that uses 0.6B for first-pass extraction, Python for receipt matching, and selective 1.7B semantic adjudication of ambiguous or incompletely extracted claims.
 
 ## Run locally
 
@@ -80,7 +105,10 @@ python -m pip install langchain langchain-core langchain-ollama
 ollama pull qwen3:1.7b
 ollama pull qwen3:0.6b
 
-# Interactive Stage 02.3 agent
+# Current Stage 02.4 (tool-free correction)
+python src/02_4_evidence_self_correction_agent.py
+
+# Preserved Stage 02.3 baseline
 python src/02_3_claim_verifier_agent.py
 ```
 
@@ -108,8 +136,11 @@ python src/02_2_tool_agent_qwen_execution_honesty.py
 
 | Path | Purpose |
 | --- | --- |
-| [`src/02_3_claim_verifier_agent.py`](src/02_3_claim_verifier_agent.py) | Current agent + Qwen3 0.6B verifier |
+| [`src/02_3_claim_verifier_agent.py`](src/02_3_claim_verifier_agent.py) | Preserved Stage 02.3 agent + Qwen3 0.6B extractor |
 | [`src/03_run_claim_evaluation.py`](src/03_run_claim_evaluation.py) | Stage 02.3 evaluation entry point |
+| [`src/02_4_evidence_self_correction_agent.py`](src/02_4_evidence_self_correction_agent.py) | Stage 02.4 structured feedback and tool-free correction |
+| [`src/03_run_evidence_correction_evaluation.py`](src/03_run_evidence_correction_evaluation.py) | Stage 02.4 reproducibility runner |
+| [`src/04_export_evidence_correction_csv.py`](src/04_export_evidence_correction_csv.py) | Stage 02.4 JSONL-to-CSV exporter |
 | [`src/02_2_tool_agent_qwen_execution_honesty.py`](src/02_2_tool_agent_qwen_execution_honesty.py) | Preserved prompt-only baseline |
 | [`src/home_tools.py`](src/home_tools.py) | Simulated device read/write functions |
 | [`experiments/stage_02_benchmark_100.jsonl`](experiments/stage_02_benchmark_100.jsonl) | Fixed 100-scenario challenge set |
@@ -117,9 +148,10 @@ python src/02_2_tool_agent_qwen_execution_honesty.py
 
 ## Next steps
 
-1. **Refine the Qwen3 0.6B extractor prompt:** negation, temporal references, and unknown devices.
-2. **Improve coverage and calibration:** verify relevant responses without keyword misses; quantify missed fabrications and false rejections.
-3. **Strengthen pre-execution controls:** prevent unsupported or ambiguous commands from changing state.
-4. **Then extend memory:** persistent conversation history, retrieval, and context management, followed by more advanced agent workflows.
+1. **Evaluate hybrid semantic claim validation:** test selective Qwen3 1.7B adjudication alongside 0.6B extraction and Python receipt verification.
+2. **Refine the Qwen3 0.6B extractor prompt:** negation, temporal references, and unknown devices.
+3. **Improve coverage and calibration:** verify relevant responses without keyword misses; quantify missed fabrications and false rejections.
+4. **Strengthen pre-execution controls:** prevent unsupported or ambiguous commands from changing state.
+5. **Then extend memory:** persistent conversation history, retrieval, and context management, followed by more advanced agent workflows.
 
 GharMind prioritizes **measurable reliability improvements and reproducible experiments** over claims of production readiness.
