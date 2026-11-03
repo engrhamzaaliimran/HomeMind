@@ -1,12 +1,16 @@
 # GharMind
 
+[Previously HomeMind — why the name changed](#naming-history)
+
 **GharMind** (گھر مائنڈ; Urdu *Ghar*, “home”, + English *Mind*) is a local, experimental **agentic smart-home assistant** built with Qwen3, Ollama, LangChain, and Python. It translates natural-language requests into real tool calls that operate on a **simulated** home, then checks whether its responses are supported by execution evidence.
 
 [Project page & interactive evaluations](https://engrhamzaaliimran.github.io/homemind.html) · [Benchmark dataset](experiments/stage_02_benchmark_100.jsonl) · [Latest results](experiments/results/stage_02_eval_20261020_225733.jsonl)
 
 > **Research prototype:** Device control is simulated. Neither prompt safeguards nor response verification currently guarantee correct or authorized actions.
 
-**Naming note:** This independent research project was previously called *HomeMind*. It was renamed *GharMind* to distinguish it from existing projects. The repository name and website URL remain unchanged to preserve existing links and citations.
+## Naming history
+
+**Previously HomeMind.** This independent research project was previously called *HomeMind*. It was renamed *GharMind* to distinguish it from existing projects. The repository name and website URL remain unchanged to preserve existing links and citations.
 
 ## Architecture
 
