@@ -1,8 +1,11 @@
 """GharMind Stage 02.4: evidence-guided self-correction (NO tool recovery).
 
-The initial Stage 02.2 agent can call tools normally. After an unsupported
-claim, the same Qwen3 1.7B model gets evidence and revises its answer with
-NO access to tools. Qwen3 0.6B extracts claims; Python verifies receipts.
+Keeps the existing Stage 02.3 agent's initial tool execution and verifier.
+On an unsupported claim, Qwen3 1.7B receives structured execution evidence
+and may revise its answer exactly once, WITHOUT any bound tools.
+
+The validator uses Qwen3 0.6B to extract claims and Python to check them.
+An extracted empty list is NOT a proof of truth; recorded as such.
 """
 import ast
 import json
@@ -28,11 +31,14 @@ def load_stage_023():
 
 base = load_stage_023()
 llm = base['llm']
-tools = base['tools']  # Benchmark metadata for initial execution ONLY.
+# Public exports required by the unchanged Stage 02 benchmark loader.
+# These are metadata for the INITIAL agent; correction never receives tools.
+tools = base['tools']
 system_prompt = base['system_prompt']
 extractor = base['extractor']
 MAX_TURNS = base['MAX_TURNS']
 
+# No bound tools, no calls to any tool in the correction path.
 CORRECTION_SYSTEM = """You are correcting a response from GharMind, a simulated-home assistant.
 This is a RESPONSE-ONLY task. You have NO tools and MUST NOT propose or pretend
 any tool invocation. Use only the supplied ORIGINAL USER REQUEST and ACTUAL
@@ -117,6 +123,7 @@ class EvidenceCorrectionAgent:
             'recovery_calls': 0,
             'decision': 'not_checked',
         }
+        # Preserve Stage 02.3's home-context gate for paired comparison.
         if not (base['HOME_CONTEXT'].search(request + ' ' + original) or current):
             audit['decision'] = 'skipped_non_home'
             self.last_verification = audit
@@ -148,6 +155,7 @@ class EvidenceCorrectionAgent:
             '\n\nWrite a corrected final answer. Do not call tools.')
         try:
             audit['revision_attempts'] = 1
+            # IMPORTANT: plain llm.invoke; never bind tools to the correction model.
             revision = llm.invoke([
                 SystemMessage(content=CORRECTION_SYSTEM),
                 HumanMessage(content=feedback),
@@ -161,6 +169,7 @@ class EvidenceCorrectionAgent:
                 audit['decision'] = 'safe_fallback'
                 correction = _fallback(current)
             else:
+                # An empty extraction is *not* proof that the revision is correct.
                 audit['decision'] = 'accepted_after_tool_free_revision'
                 audit['second_extraction_empty'] = len(claims2) == 0
         except Exception as exc:
