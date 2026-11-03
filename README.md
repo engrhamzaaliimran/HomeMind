@@ -1,10 +1,12 @@
-# HomeMind
+# GharMind
 
-**HomeMind** is a local, experimental **agentic smart-home assistant** built with Qwen3, Ollama, LangChain, and Python. It translates natural-language requests into real tool calls that operate on a **simulated** home, then checks whether its responses are supported by execution evidence.
+**GharMind** (گھر مائنڈ; Urdu *Ghar*, “home”, + English *Mind*) is a local, experimental **agentic smart-home assistant** built with Qwen3, Ollama, LangChain, and Python. It translates natural-language requests into real tool calls that operate on a **simulated** home, then checks whether its responses are supported by execution evidence.
 
 [Project page & interactive evaluations](https://engrhamzaaliimran.github.io/homemind.html) · [Benchmark dataset](experiments/stage_02_benchmark_100.jsonl) · [Latest results](experiments/results/stage_02_eval_20261020_225733.jsonl)
 
 > **Research prototype:** Device control is simulated. Neither prompt safeguards nor response verification currently guarantee correct or authorized actions.
+
+**Naming note:** This independent research project was previously called *HomeMind*. It was renamed *GharMind* to distinguish it from existing projects. The repository name and website URL remain unchanged to preserve existing links and citations.
 
 ## Architecture
 
@@ -69,7 +71,7 @@ Across 120 responses, **87 were accepted unchanged**, **22 bypassed the keyword-
 Requires **Python**, **Ollama**, and the Python packages used by LangChain and its Ollama integration.
 
 ```bash
-# From the HomeMind repository root
+# From the GharMind repository root
 python -m pip install langchain langchain-core langchain-ollama
 ollama pull qwen3:1.7b
 ollama pull qwen3:0.6b
@@ -116,4 +118,4 @@ python src/02_2_tool_agent_qwen_execution_honesty.py
 3. **Strengthen pre-execution controls:** prevent unsupported or ambiguous commands from changing state.
 4. **Then extend memory:** persistent conversation history, retrieval, and context management, followed by more advanced agent workflows.
 
-HomeMind prioritizes **measurable reliability improvements and reproducible experiments** over claims of production readiness.
+GharMind prioritizes **measurable reliability improvements and reproducible experiments** over claims of production readiness.
